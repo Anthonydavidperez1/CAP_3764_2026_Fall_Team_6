@@ -1,0 +1,17 @@
+name: amazon-reviews
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.10
+  - pandas=2.3
+  - numpy=2.2
+  - pyarrow>=20,<26
+  - seaborn=0.13
+  - scikit-learn=1.7
+  - jupyterlab>=4,<5
+  - nbconvert>=7,<8
+  - ipykernel>=6,<8
+  - pip
+  - pip:
+      - huggingface_hub>=1,<3
