@@ -12,8 +12,6 @@ store, rating volume, and average customer ratings. Associations are not causati
 | 3 | wa1eed2 | Statistics and hypothesis testing |
 | 4 | Anthonydavidperez1 | Visualizations, decks, repository owner |
 
-Team chat and shared deck: links still need to be supplied by the team.
-
 ## Dataset
 
 [Amazon Reviews 2023, McAuley Lab](https://amazon-reviews-2023.github.io/),
@@ -43,6 +41,24 @@ Install Git and conda, then use Anaconda Prompt or a conda-enabled shell:
 ```bash
 git clone https://github.com/Anthonydavidperez1/CAP_3764_2026_Fall_Team_6.git
 cd CAP_3764_2026_Fall_Team_6
+```
+
+Select the project's conda-forge configuration for this shell. This prevents
+Miniconda from checking unused default channels during setup.
+
+Windows Anaconda Prompt (cmd):
+
+```bat
+set "CONDARC=%CD%\.condarc"
+```
+
+PowerShell: `$env:CONDARC = (Resolve-Path .condarc).Path`
+
+macOS/Linux: `export CONDARC="$PWD/.condarc"`
+
+Then run:
+
+```bash
 conda env create -f environment.yml
 conda activate amazon-reviews
 python -c "import pandas, numpy, pyarrow, seaborn, sklearn, huggingface_hub; print('imports OK')"
@@ -51,8 +67,7 @@ python -m src.collect --counts
 jupyter lab
 ```
 
-After P1's PR is merged these commands obtain the published code. Before merge,
-use P1's branch if pushed. Run `notebooks/01_collection_p1.ipynb` with Restart
+Run `notebooks/01_collection_p1.ipynb` with Restart
 Kernel and Run All Cells. It locates the repo from the root or notebooks directory.
 
 The CLI streams to `data/raw/products_raw.parquet`, using bounded memory. Reruns
@@ -80,8 +95,34 @@ Submission 1 is October 4; recording is October 3. Every person presents and
 submits their own peer review form. Later submission plans are provisional
 until the professor supplies the actual requirements.
 
-See `reports/p1_verification.md` for measured row counts and checks. Conda build,
-GitHub publication, and teammate setup must be verified before declaring readiness.
+## Person 2: start cleaning
+
+After cloning and building the environment above, create your task branch:
+
+```bash
+git switch main
+git pull origin main
+git switch -c p2-data-cleaning
+python -m src.collect
+```
+
+In `notebooks/02_cleaning_p2.ipynb`, import cleaning functions from
+`src/clean.py`. Read `data/raw/products_raw.parquet` using `load_raw()`.
+Keep that raw file unchanged and save cleaned output under `data/processed/`.
+Audit missing values, duplicate rows and `parent_asin` overlap across categories,
+and inspect raw prices before conversion. `price` and `details` are strings;
+`categories`, `features`, and `description` contain lists. Document every
+cleaning decision and before/after row counts. Do not assume `details` is a dict.
+
+Downloads total about 1.69 GB and the combined parquet is about 1.15 GB; allow
+several GB of disk space and additional RAM for the full DataFrame. The streaming
+collection command uses less memory than the notebook. Data is not included in Git.
+
+Restart and run your notebook, commit only your code and notebook, push your
+branch, and open a PR to `main`. Confirm collection reproduces within 24 hours
+of the P1 handoff so any setup problems can be resolved before September 29.
+For an existing environment, use `conda env update -f environment.yml --prune`
+instead of `conda env create` (with the same CONDARC setting).
 
 ## Verified raw row counts
 
