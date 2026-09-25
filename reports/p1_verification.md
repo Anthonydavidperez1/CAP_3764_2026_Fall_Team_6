@@ -48,3 +48,8 @@ Do not post "env working" or tell Person 2 that main is ready until the remainin
 setup/publication checks actually pass.
 
 JupyterLab server check: started on 127.0.0.1, returned HTTP 200, then stopped.
+
+Fresh-copy verification passed: cloned the local committed branch into a new
+checkout with no data directory, downloaded All_Beauty, and loaded (112590, 14).
+This used the existing isolated Python venv, NOT a newly built conda environment
+and NOT the unpushed remote branch. Those stronger checks remain pending.

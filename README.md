@@ -82,3 +82,16 @@ until the professor supplies the actual requirements.
 
 See `reports/p1_verification.md` for measured row counts and checks. Conda build,
 GitHub publication, and teammate setup must be verified before declaring readiness.
+
+## Verified raw row counts
+
+| Category | Rows |
+|---|---:|
+| All_Beauty | 112,590 |
+| Musical_Instruments | 213,593 |
+| Toys_and_Games | 890,874 |
+| Industrial_and_Scientific | 427,564 |
+| **Total** | **1,644,621** |
+
+The raw table has 14 columns. Counts were verified against source parquet footers
+and the executed collection notebook; these are raw entries, not deduplicated products.
