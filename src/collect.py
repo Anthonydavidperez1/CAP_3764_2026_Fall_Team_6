@@ -156,7 +156,7 @@ def collect_to_disk() -> Path:
         if writer is not None:
             writer.close()
     temporary.replace(path)
-    print(f"Saved {path}", flush=True)
+    print(f"Saved {path.relative_to(ROOT)}", flush=True)
     return path
 
 
