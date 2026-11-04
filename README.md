@@ -34,7 +34,7 @@ We preserve nested categories, details, descriptions, and features. Only
 `images`, `videos`, and `bought_together` are omitted. No imputation, duplicate
 removal, or value conversion is performed during collection.
 
-## Reproduce
+## Setup and collection
 
 Install Git and conda, then use Anaconda Prompt or a conda-enabled shell:
 
@@ -59,7 +59,7 @@ macOS/Linux: `export CONDARC="$PWD/.condarc"`
 Then run:
 
 ```bash
-conda env create -f environment.yml
+conda env create -f amazon-reviews-env.yml
 conda activate amazon-reviews
 python -c "import pandas, numpy, pyarrow, seaborn, sklearn, huggingface_hub; print('imports OK')"
 python -m src.collect
@@ -84,18 +84,43 @@ df = load_raw()  # after running the full collection CLI
 
 The sample is the first 100 records, not a random or representative sample.
 
+## Keep the environment synchronized
+
+The environment file is now `amazon-reviews-env.yml`. The environment name
+remains `amazon-reviews`; an existing environment does not need to be recreated.
+After a teammate changes dependencies, select the `.condarc` setting above, then:
+
+```bash
+git pull origin main
+conda env update -n amazon-reviews -f amazon-reviews-env.yml --prune
+conda activate amazon-reviews
+python -c "import pandas, numpy, sklearn, seaborn, pyarrow, matplotlib, huggingface_hub; print('imports OK')"
+python -c "from src.clean import *; from src.stats import *; from src.viz import *; print('modules OK')"
+```
+
+Tell the team "env synced" after the checks pass. In JupyterLab, select the
+`amazon-reviews` kernel. If it is missing, register it from the active environment:
+
+```bash
+python -m ipykernel install --user --name amazon-reviews --display-name "Python (amazon-reviews)"
+```
+
 ## Workflow and handoff
 
 Person 1 supplies raw data; Person 2 cleans it; Persons 3 and 4 use the clean data.
 Use a branch and PR for each task. Pull main before starting and integrate it
 before pushing. Never commit data, caches, credentials, or local environments.
 
-P1 collection is due September 27, 2026; P2 cleaning is due September 29.
-Submission 1 is October 4; recording is October 3. Every person presents and
-submits their own peer review form. Later submission plans are provisional
-until the professor supplies the actual requirements.
+Submission 1 collection, cleaning, statistics, and visualizations are merged.
+Submission 2 is due November 15, 2026, at 11:59 p.m. The next P1 milestones are
+the environment/setup update (November 4), pipeline and integrated notebook
+skeleton (November 7), and final integration and README (November 12).
+The pipeline and modeling modules are upcoming work, so the commands above
+currently reproduce collection. Each member also submits their own peer-review
+form. Keep work in small issues and PRs, and fill in the PR template with the
+reason for the change and the checks performed.
 
-## Person 2: start cleaning
+## Submission 1 collection-to-cleaning handoff (reference)
 
 After cloning and building the environment above, create your task branch:
 
@@ -120,8 +145,8 @@ collection command uses less memory than the notebook. Data is not included in G
 
 Restart and run your notebook, commit only your code and notebook, push your
 branch, and open a PR to `main`. Confirm collection reproduces within 24 hours
-of the P1 handoff so any setup problems can be resolved before September 29.
-For an existing environment, use `conda env update -f environment.yml --prune`
+of a collection handoff so setup problems can be resolved promptly.
+For an existing environment, use `conda env update -n amazon-reviews -f amazon-reviews-env.yml --prune`
 instead of `conda env create` (with the same CONDARC setting).
 
 ## Verified raw row counts

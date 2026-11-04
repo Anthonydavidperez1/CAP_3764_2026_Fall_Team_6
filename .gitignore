@@ -5,3 +5,4 @@ _setup_logs/
 .venv/
 .env
 *.pyc
+models/
