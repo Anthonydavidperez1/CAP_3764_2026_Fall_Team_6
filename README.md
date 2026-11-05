@@ -105,6 +105,32 @@ Tell the team "env synced" after the checks pass. In JupyterLab, select the
 python -m ipykernel install --user --name amazon-reviews --display-name "Python (amazon-reviews)"
 ```
 
+## Run the available pipeline stages
+
+With `amazon-reviews` active, run from the repository root:
+
+```bash
+python -m src.pipeline --quick
+python -m src.pipeline
+```
+
+`--quick` uses the first 5,000 All_Beauty entries as a smoke check, not a random
+or representative sample. The default uses all four categories, reusing an
+existing `data/raw/products_raw.parquet` or collecting it if absent. For a fresh
+source rebuild, use the existing `python -m src.collect` command first.
+The pipeline calls the shared collection, cleaning, statistics and EDA-chart
+functions. It cleans in batches to keep memory use bounded, then reads only
+needed columns for EDA. Generated clean data, three summary tables and seven
+EDA charts go under ignored `data/processed/pipeline/quick/` or `full/`, without
+replacing the team's processed data, report tables or figures.
+
+Open `notebooks/00_main_project.ipynb` for the integrated runnable skeleton;
+it defaults to quick mode. Features, modeling, final metrics and model charts
+are explicitly pending their owners' deliveries and P1-c integration. A
+successful run currently verifies collection/cleaning/EDA, not the completed
+Submission 2 modeling workflow. Every scatter sample uses Person 4's fixed seed
+of 42; the pipeline does not create a new train/test split.
+
 ## Workflow and handoff
 
 Person 1 supplies raw data; Person 2 cleans it; Persons 3 and 4 use the clean data.
