@@ -1,0 +1,13 @@
+feature,rmse_increase_mean,rmse_increase_std,rows
+store,0.07716,0.00133,20000
+log_rating_number,0.01799,0.0005,20000
+has_price,0.00559,0.00023,20000
+title_len,0.00343,0.00015,20000
+main_category,0.00224,0.0002,20000
+n_description,0.00188,0.00026,20000
+category,0.00163,0.00021,20000
+n_details,0.00138,0.00015,20000
+log_price,0.00125,0.00013,20000
+n_categories,0.00119,0.00019,20000
+n_features,0.0009,8e-05,20000
+price_is_from,0.0,0.0,20000

@@ -1,0 +1,5 @@
+model,split,rows,rmse,mae,r2
+Baseline (mean),train,940325,0.5085,0.3946,0.0
+Baseline (mean),test,235082,0.5092,0.3953,-0.0
+HistGradientBoosting (tuned),train,940325,0.3956,0.2875,0.3949
+HistGradientBoosting (tuned),test,235082,0.4368,0.3207,0.2642
