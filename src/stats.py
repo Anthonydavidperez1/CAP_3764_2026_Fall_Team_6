@@ -36,9 +36,12 @@ def numeric_summary(df: pd.DataFrame,
     """Describe the numerical variables (spec item 4a).
 
     One row per variable: count, n_missing, mean, median, std, min,
-    quartiles, max and skew. Skew tells us whether the mean is misleading:
-    a large positive skew means a few huge values pull the mean up, so the
-    median is the better "typical" value.
+    quartiles, max and skew. Skew tells us whether the mean is misleading.
+    The direction is named after the long tail: a positive skew is
+    right-skewed (a few very large values pull the mean above the median,
+    e.g. price and rating_number); a negative skew is left-skewed (a tail of
+    low values pulls the mean below the median, e.g. average_rating). When
+    the skew is large, the median is the better "typical" value.
     """
     rows = {}
     for col in cols:
@@ -213,7 +216,7 @@ def correlation_table(df: pd.DataFrame,
     """Correlation matrix for the numeric columns.
 
     Default is Spearman (rank-based), because rating_number and price are
-    heavily skewed and Pearson would be dominated by a few extreme products.
+    heavily right-skewed and Pearson would be dominated by a few extreme products.
     Pass ``method="pearson"`` to compare. Each pair uses the rows where both
     values exist, so price correlations cover priced products only.
     """
