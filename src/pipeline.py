@@ -3,14 +3,17 @@
     python -m src.pipeline          # four categories; reuses collected raw data
     python -m src.pipeline --quick  # first 5,000 All_Beauty rows, NOT a random sample
 
-P1-b connects collection, cleaning and EDA. Feature engineering, modeling and
-model charts are explicitly pending P2/P3/P4 delivery and P1-c integration.
+Full mode connects collection, cleaning, features, CV, tuning, final evaluation
+and EDA/model charts. Quick mode verifies a small sample and reads the committed
+model tables without fitting or evaluating models.
 Verification outputs stay in gitignored data/processed/pipeline/{quick,full}/;
 the team's existing cleaned data, result tables and report figures are untouched.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from time import perf_counter
 
@@ -112,20 +115,67 @@ def run_eda(clean_path: Path) -> dict[str, Path]:
     return paths
 
 
-def run_features(clean_path: Path) -> Path | None:
-    """P1-c will connect P2's model-ready features once their PR is delivered."""
-    print("features: SKIPPED; awaiting P2 features/split and P1-c integration", flush=True)
-    return None
+RESULT_FILES = {
+    "cv": "cv_results.csv", "tuning": "tuning_results.csv",
+    "test": "test_results.csv", "importance": "feature_importance.csv",
+    "predictions": "test_predictions.csv", "by_category": "test_errors_by_category.csv",
+}
 
 
-def run_models(features_path: Path | None) -> Path | None:
-    """P1-c will connect P3's training/evaluation API; do not invent its results."""
-    print("models: SKIPPED; awaiting P3 evaluation and P1-c integration", flush=True)
-    return None
+def run_features(clean_path: Path) -> dict[str, Path]:
+    """Call P2's feature builder and deterministic category-stratified split."""
+    from src import features
+    return features.build_model_data(clean_path=clean_path,
+                                     out_dir=clean_path.parent / "features")
 
 
-def run_figures(clean_path: Path, model_results_path: Path | None = None) -> list[Path]:
-    """Call P4's existing EDA plots, redirecting PNGs away from reports/figures.
+@contextmanager
+def _model_paths(split_dir: Path, table_dir: Path):
+    """Adapt P3's fixed-path API without editing it or overwriting report tables.
+
+    Restore module globals even on failure. The CLI/notebook calls are sequential;
+    this adapter must not be used concurrently by threads in the same process.
+    """
+    from src import features, models
+    old_tables, old_loader = models.TABLES_DIR, models.load_split
+    try:
+        models.TABLES_DIR = table_dir
+        models.load_split = partial(features.load_split, out_dir=split_dir)
+        yield models
+    finally:
+        models.TABLES_DIR, models.load_split = old_tables, old_loader
+
+
+def run_models(model_data: dict[str, Path], *, quick: bool = False) -> dict[str, Path]:
+    """Run P3's unchanged CV/final routines, or read reference tables in quick mode.
+
+    Quick mode NEVER calls CV, tuning or test evaluation. Full mode uses the
+    newly generated split and writes only beneath data/processed/pipeline/full/.
+    The full reproduction evaluates the frozen test split after training-only
+    model selection; it does not tune against test outcomes.
+    """
+    if quick:
+        directory = ROOT / "reports" / "tables"
+        paths = {key: directory / name for key, name in RESULT_FILES.items()}
+        missing = [p.name for p in paths.values() if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(f"Committed model tables missing: {missing}; pull main first")
+        print("models: skipped in --quick; using committed tables unchanged", flush=True)
+        return paths
+    split_dir = model_data["train"].parent
+    if model_data["test"].parent != split_dir:
+        raise ValueError("Train/test files must come from the same feature-builder run")
+    directory = split_dir.parent / "model_tables"
+    with _model_paths(split_dir, directory) as models:
+        cv_path = models.main([])
+        paths = models.run_final(random_state=42)
+    paths["cv"] = cv_path
+    print(f"models: CV, tuning and final evaluation -> {directory.relative_to(ROOT)}", flush=True)
+    return paths
+
+
+def run_figures(clean_path: Path, model_results: dict[str, Path]) -> list[Path]:
+    """Call P4's EDA and model plots, keeping PNGs away from reports/figures.
 
     FIG_DIR is restored even on failure. This CLI/notebook workflow is sequential;
     do not call it concurrently in threads because P4's module uses a global path.
@@ -142,17 +192,19 @@ def run_figures(clean_path: Path, model_results_path: Path | None = None) -> lis
     try:
         viz.FIG_DIR = directory
         paths = viz.save_all_figures(frame)
+        # Explicit table input: reference results in quick mode, reproduced results in full.
+        paths = [p for p in paths if p.name[:2] in {f"{n:02d}" for n in range(1, 8)}]
+        paths += viz.save_model_figures(table_dir=model_results["test"].parent)
     finally:
         viz.FIG_DIR = previous
         plt.close("all")
-    print(f"figures: {len(frame):,} rows -> {len(paths)} EDA PNGs; "
+    print(f"figures: {len(frame):,} rows -> {len(paths)} EDA/model PNGs; "
           f"{directory.relative_to(ROOT)}", flush=True)
-    print("model figures: SKIPPED; awaiting P4 model charts and P1-c integration", flush=True)
     return paths
 
 
 def main(argv: list[str] | None = None) -> dict:
-    """Run the available phases and return artifact paths for the main notebook."""
+    """Run the lifecycle and return artifact paths for the integrated notebook."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true",
                         help="First 5,000 All_Beauty rows; smoke check only")
@@ -161,13 +213,14 @@ def main(argv: list[str] | None = None) -> dict:
     raw = run_collect(quick=args.quick)
     clean = run_clean(raw)
     tables = run_eda(clean)
-    features = run_features(clean)
-    models = run_models(features)
-    figures = run_figures(clean, models)
-    print(f"Available collection/cleaning/EDA stages finished in "
-          f"{perf_counter() - started:.1f}s. Modeling is NOT complete.", flush=True)
+    model_data = run_features(clean)
+    model_results = run_models(model_data, quick=args.quick)
+    figures = run_figures(clean, model_results)
+    status = ("Quick verification complete; model charts use committed results; no model fitting."
+              if args.quick else "Full lifecycle complete; reproduced model results saved separately.")
+    print(f"{status} Elapsed: {perf_counter() - started:.1f}s.", flush=True)
     return {"raw": raw, "clean": clean, "tables": tables, "figures": figures,
-            "features": features, "models": models}
+            "features": model_data, "models": model_results}
 
 
 if __name__ == "__main__":
