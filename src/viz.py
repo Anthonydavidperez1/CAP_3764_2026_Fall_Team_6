@@ -437,15 +437,193 @@ def save_all_figures(df: pd.DataFrame) -> list[Path]:
     """Build every chart and return the list of PNG files written."""
     for plot in ALL_PLOTS:
         plt.close(plot(df))
-    return sorted(FIG_DIR.glob("*.png"))
+    return sorted(p for p in FIG_DIR.glob("0[1-7]_*.png"))
 
 
-def main() -> None:
-    """Rebuild every figure from the command line: python -m src.viz"""
+# ---------------------------------------------------------------------------
+# Model result charts (Submission 2)
+# ---------------------------------------------------------------------------
+# These read only the small result tables Person 3 commits to
+# reports/tables/, so they need no raw data and run in a few seconds:
+#     python -m src.viz models
+TABLE_DIR = ROOT / "reports" / "tables"
+BASELINE_COLOR = "#a3a29a"   # the "guess the average" model, shown in grey
+
+# Plain-English names for the model features, used on the importance chart.
+FEATURE_LABELS = {
+    "store": "Brand / store",
+    "log_rating_number": "Number of ratings (log)",
+    "has_price": "Has a listed price",
+    "title_len": "Title length",
+    "main_category": "Amazon main category",
+    "n_description": "Description paragraphs",
+    "category": "Source category",
+    "n_details": "Product detail fields",
+    "log_price": "Price (log)",
+    "n_categories": "Category tags",
+    "n_features": "Feature bullets",
+    "price_is_from": "Price shown as \"from\"",
+}
+
+
+def load_model_tables(table_dir: Path | None = None) -> dict[str, pd.DataFrame]:
+    """Read Person 3's result tables from reports/tables/."""
+    table_dir = table_dir or TABLE_DIR
+    names = ["cv_results", "test_results", "feature_importance",
+             "test_predictions", "test_errors_by_category"]
+    return {n: pd.read_csv(table_dir / f"{n}.csv") for n in names}
+
+
+def plot_model_comparison(cv_results: pd.DataFrame,
+                          test_results: pd.DataFrame | None = None) -> plt.Figure:
+    """Bar chart: 5-fold CV RMSE per model (lower is better), with the
+    spread across folds as error bars and the baseline in grey. If the test
+    table is given, the tuned model's held-out test RMSE is noted."""
+    _apply_style()
+    cv = cv_results.sort_values("rmse_mean", ascending=False)
+    colors = [BASELINE_COLOR if "Baseline" in m else MAIN_COLOR for m in cv["model"]]
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    bars = ax.barh(cv["model"], cv["rmse_mean"], xerr=cv["rmse_std"],
+                   color=colors, capsize=4, error_kw={"ecolor": INK_SOFT})
+    for bar, value in zip(bars, cv["rmse_mean"]):
+        ax.text(value + 0.004, bar.get_y() + bar.get_height() / 2,
+                f"{value:.3f}", va="center", fontsize=12, color=INK)
+    ax.set_xlim(0.40, max(cv["rmse_mean"]) + 0.03)
+    ax.set_xlabel("RMSE (stars), 5-fold cross-validation; lower is better")
+    ax.set_ylabel("")
+    ax.grid(axis="y", visible=False)
+    ax.set_title("Every model beats guessing the average rating")
+    if test_results is not None:
+        tuned = test_results[(test_results["split"] == "test")
+                             & ~test_results["model"].str.contains("Baseline")]
+        base = test_results[(test_results["split"] == "test")
+                            & test_results["model"].str.contains("Baseline")]
+        if len(tuned) and len(base):
+            t, b = tuned.iloc[0], base.iloc[0]
+            cut = (1 - t["rmse"] / b["rmse"]) * 100
+            ax.text(0, -0.22,
+                    f"Held-out test set ({int(t['rows']):,} products): tuned "
+                    f"model RMSE {t['rmse']:.3f} vs baseline {b['rmse']:.3f} "
+                    f"({cut:.0f}% lower error), R² {t['r2']:.2f}",
+                    transform=ax.transAxes, fontsize=11, color=INK_SOFT)
+    ax.text(0, -0.29 if test_results is not None else -0.22,
+            "Note: x-axis starts at 0.40 stars to show the differences.",
+            transform=ax.transAxes, fontsize=10, color=INK_SOFT, style="italic")
+    _save(fig, "08_model_comparison")
+    return fig
+
+
+def plot_predicted_vs_actual(predictions: pd.DataFrame,
+                             n: int = 20_000) -> plt.Figure:
+    """Hexbin of predicted vs actual rating on the test set, with the
+    perfect-prediction line y = x. A sample keeps the file small."""
+    _apply_style()
+    sample = predictions.sample(min(n, len(predictions)), random_state=RANDOM_STATE)
+    fig, ax = plt.subplots(figsize=(7.5, 7))
+    hb = ax.hexbin(sample["actual"], sample["predicted"], gridsize=40,
+                   extent=(1, 5, 1, 5), mincnt=1, bins="log", cmap="Blues")
+    ax.plot([1, 5], [1, 5], color=INK, linewidth=1.5, linestyle="--",
+            label="Perfect prediction")
+    ax.set_xlim(1, 5)
+    ax.set_ylim(1, 5)
+    ax.set_aspect("equal")
+    ax.set_xlabel("Actual average rating (stars)")
+    ax.set_ylabel("Predicted rating (stars)")
+    ax.set_title("The model pulls low ratings toward the middle")
+    ax.legend(loc="upper left")
+    cbar = fig.colorbar(hb, ax=ax, shrink=0.8)
+    cbar.set_label("Products (log scale)")
+    cbar.outline.set_visible(False)
+    ax.text(0, -0.17, f"Random sample of {len(sample):,} test-set products.",
+            transform=ax.transAxes, fontsize=10, color=INK_SOFT, style="italic")
+    _save(fig, "09_predicted_vs_actual")
+    return fig
+
+
+def plot_residuals_by_category(predictions: pd.DataFrame) -> plt.Figure:
+    """Boxplot of prediction error (actual - predicted) for each category.
+    A box centred on 0 means no systematic over- or under-prediction; a
+    taller box means the category is harder to predict."""
+    _apply_style()
+    cats = _categories_in(predictions)
+    data = [predictions.loc[predictions["category"] == c, "residual"] for c in cats]
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    box = ax.boxplot(data, vert=False, patch_artist=True, showfliers=False,
+                     widths=0.6, medianprops={"color": INK, "linewidth": 1.5})
+    for patch, c in zip(box["boxes"], cats):
+        patch.set_facecolor(CATEGORY_COLORS[c])
+        patch.set_alpha(0.85)
+        patch.set_edgecolor(INK_SOFT)
+    ax.set_yticks(range(1, len(cats) + 1), [CATEGORY_LABELS[c] for c in cats])
+    ax.axvline(0, color=INK, linewidth=1.2, linestyle="--")
+    for i, values in enumerate(data, start=1):
+        rmse = float(np.sqrt(np.mean(values ** 2)))
+        ax.text(1.02, i, f"RMSE {rmse:.2f}", transform=ax.get_yaxis_transform(),
+                va="center", fontsize=11, color=INK_SOFT)
+    ax.set_xlabel("Prediction error: actual - predicted (stars)")
+    ax.grid(axis="y", visible=False)
+    ax.set_title("Beauty products are the hardest to predict")
+    ax.text(0, -0.22, "Boxes show the middle 50% of errors; whiskers 1.5× IQR; outliers hidden.",
+            transform=ax.transAxes, fontsize=10, color=INK_SOFT, style="italic")
+    _save(fig, "10_residuals_by_category")
+    return fig
+
+
+def plot_feature_importance(importance: pd.DataFrame, top: int = 10) -> plt.Figure:
+    """Horizontal bars: how much the test RMSE rises when each feature is
+    shuffled (permutation importance). Error bars are the spread over
+    repeats."""
+    _apply_style()
+    imp = importance.sort_values("rmse_increase_mean", ascending=False).head(top)
+    imp = imp.iloc[::-1]
+    labels = [FEATURE_LABELS.get(f, f) for f in imp["feature"]]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh(labels, imp["rmse_increase_mean"], xerr=imp["rmse_increase_std"],
+            color=MAIN_COLOR, capsize=3, error_kw={"ecolor": INK_SOFT})
+    for y, value in enumerate(imp["rmse_increase_mean"]):
+        ax.text(value + imp["rmse_increase_std"].iloc[y] + 0.0012, y, f"{value:.3f}", va="center", fontsize=11, color=INK)
+    ax.set_xlim(0, imp["rmse_increase_mean"].max() * 1.18)
+    ax.set_xlabel("Increase in RMSE when the feature is shuffled (stars)")
+    ax.grid(axis="y", visible=False)
+    ax.set_title("Brand matters most; price barely matters")
+    ax.text(0, -0.2, f"Permutation importance on {int(imp['rows'].iloc[0]):,} "
+            "test-set products; longer bar = model relies on it more.",
+            transform=ax.transAxes, fontsize=10, color=INK_SOFT, style="italic")
+    _save(fig, "11_feature_importance")
+    return fig
+
+
+def save_model_figures(table_dir: Path | None = None) -> list[Path]:
+    """Build the four model charts from reports/tables/ and return their paths."""
+    t = load_model_tables(table_dir)
+    figs = [
+        plot_model_comparison(t["cv_results"], t["test_results"]),
+        plot_predicted_vs_actual(t["test_predictions"]),
+        plot_residuals_by_category(t["test_predictions"]),
+        plot_feature_importance(t["feature_importance"]),
+    ]
+    for fig in figs:
+        plt.close(fig)
+    return [FIG_DIR / f"{n}.png" for n in
+            ("08_model_comparison", "09_predicted_vs_actual",
+             "10_residuals_by_category", "11_feature_importance")]
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Rebuild figures from the command line.
+
+    python -m src.viz           EDA charts (needs the data) + model charts
+    python -m src.viz models    model charts only (needs just reports/tables/)
+    """
+    import sys
+    args = sys.argv[1:] if argv is None else argv
     plt.switch_backend("Agg")     # draw to files only, no window needed
-    df = load_clean_data()
-    print(f"Loaded {len(df):,} products")
-    for path in save_all_figures(df):
+    if not args or args[0] != "models":
+        df = load_clean_data()
+        print(f"Loaded {len(df):,} products")
+        for path in save_all_figures(df):
+            print("Saved", path.relative_to(ROOT))
+    for path in save_model_figures():
         print("Saved", path.relative_to(ROOT))
 
 
